@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>玉米粒大冒险 - 农庄四季</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: 'Microsoft YaHei', sans-serif;
+    overflow: hidden;
+}
+#gameContainer {
+    position: relative;
+    border: 4px solid #4a7c59;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 30px rgba(74, 124, 89, 0.5);
+}
+canvas { display: block; }
+#ui {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 8px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 3;
+}
+.bar-container { display: flex; align-items: center; gap: 6px; }
+.bar {
+    width: 120px; height: 16px;
+    background: #333; border-radius: 8px;
+    overflow: hidden; border: 2px solid #555;
+}
+.bar-fill { height: 100%; transition: width 0.2s; }
+#hpBar { background: #e74c3c; }
+#mpBar { background: #3498db; }
+.stat-item { display: flex; align-items: center; gap: 4px; font-weight: bold; }
+#skillHint {
+    position: absolute; bottom: 10px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); color: #fff;
+    padding: 8px 16px; border-radius: 20px;
+    font-size: 13px; pointer-events: none;
+    transition: opacity 0.3s; z-index: 4;
+}
+#gameOver, #victory, #levelIntro, #dishScreen {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: none; flex-direction: column;
+    justify-content: center; align-items: center;
+    z-index: 10;
+}
+#gameOver { background: rgba(0,0,0,0.85); color: white; }
+#gameOver h1 { color: #e74c3c; font-size: 48px; margin-bottom: 20px; }
+#victory { background: rgba(0,0,0,0.85); color: white; }
+#victory h1 { color: #f1c40f; font-size: 48px; margin-bottom: 15px; }
+#levelIntro {
+    background: rgba(0,0,0,0.88); color: white;
+}
+#levelIntro h1 { font-size: 42px; margin-bottom: 20px; }
+#levelIntro .season-desc {
+    font-size: 18px; color: #ccc; max-width: 600px;
+    text-align: center; line-height: 1.8; margin-bottom: 30px;
+}
+#dishScreen {
+    background: rgba(20,10,5,0.95); color: white;
+}
+#dishScreen h1 { color: #f1c40f; font-size: 42px; margin-bottom: 20px; }
+.dish-plate {
+    width: 300px; height: 300px; border-radius: 50%;
+    background: #fff; border: 8px solid #d4a017;
+    display: flex; flex-wrap: wrap; justify-content: center;
+    align-items: center; padding: 30px; gap: 10px;
+    margin-bottom: 20px;
+}
+.dish-ingredient {
+    font-size: 40px; animation: bounceIn 0.6s ease-out;
+}
+@keyframes bounceIn {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+}
+.btn {
+    padding: 12px 30px; font-size: 18px;
+    border: none; border-radius: 8px; cursor: pointer;
+    margin: 10px; font-family: inherit;
+    transition: transform 0.2s;
+}
+.btn:hover { transform: scale(1.05); }
+.btn-restart { background: #27ae60; color: white; }
+.btn-next { background: #f39c12; color: white; }
+#instructions {
+    position: absolute; top: 38px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8); color: #ddd;
+    padding: 10px 18px; border-radius: 10px;
+    font-size: 11px; line-height: 1.7;
+    text-align: center; max-width: 650px;
+    z-index: 5; transition: opacity 0.5s;
+}
+.skill-tag {
+    display: inline-block; padding: 1px 6px;
+    border-radius: 4px; font-size: 10px; margin: 0 2px;
+}
+.tag-popcorn { background: #e67e22; color: white; }
+.tag-cob { background: #d4a017; color: white; }
+.materials-box {
+    display: flex; gap: 15px; margin: 10px 0;
+}
+.material-item {
+    background: rgba(255,255,255,0.1);
+    padding: 8px 12px; border-radius: 8px;
+    font-size: 14px;
+}
+.material-item.collected { background: rgba(39,174,96,0.3); }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+<canvas id="gameCanvas" width="900" height="650"></canvas>
+<div id="ui">
+    <div class="bar-container">
+        <span>HP</span>
+        <div class="bar"><div id="hpBar" class="bar-fill" style="width:100%"></div></div>
+        <span id="hpText">100/100</span>
+    </div>
+    <div class="bar-container">
+        <span>MP</span>
+        <div class="bar"><div id="mpBar" class="bar-fill" style="width:100%"></div></div>
+        <span id="mpText">100/100</span>
+    </div>
+    <div class="stat-item">
+        <span>金币</span><span id="coinText">0 / 50</span>
+    </div>
+    <div class="stat-item">
+        <span>形态</span><span id="stateText">玉米粒</span>
+    </div>
+    <div class="stat-item">
+        <span>食材</span><span id="materialText">0/4</span>
+    </div>
+</div>
+<div id="skillHint"></div>
+<div id="gameOver">
+    <h1>游戏结束</h1>
+    <p style="font-size:20px; margin-bottom:20px;">你的玉米粒被吃掉了！</p>
+    <button class="btn btn-restart" onclick="restartGame()">重新开始</button>
+</div>
+<div id="victory">
+    <h1>关卡完成！</h1>
+    <p style="font-size:18px; margin-bottom:10px; color:#ccc;">收集材料进度：</p>
+    <div id="materialsDisplay" class="materials-box"></div>
+    <p id="victoryMsg" style="font-size:16px; margin-bottom:20px; color:#aaa;"></p>
+    <button class="btn btn-next" id="nextLevelBtn" onclick="nextLevel()">下一关</button>
+    <button class="btn btn-restart" onclick="restartGame()">重新开始</button>
+</div>
+<div id="levelIntro">
+    <h1 id="levelTitle">关卡标题</h1>
+    <p id="levelSeason" style="font-size:24px; color:#f39c12; margin-bottom:15px;"></p>
+    <p id="levelDesc" class="season-desc"></p>
+    <button class="btn btn-next" onclick="startLevel()">开始冒险</button>
+</div>
+<div id="dishScreen">
+    <h1>丰收盛宴</h1>
+    <p style="font-size:18px; margin-bottom:15px; color:#ccc;">你收集的所有食材已汇聚成一道美味佳肴！</p>
+    <div id="dishPlate" class="dish-plate"></div>
+    <p id="dishName" style="font-size:22px; color:#f1c40f; margin-bottom:10px;"></p>
+    <p id="dishDesc" style="font-size:16px; color:#aaa; max-width:500px; text-align:center; margin-bottom:20px;"></p>
+    <button class="btn btn-restart" onclick="restartGame()">再来一次</button>
+</div>
+<div id="instructions">
+    <b>操作指南</b><br>
+    WASD 移动 | 空格跳跃 | 鼠标左键攻击（玉米棒状态）<br>
+    <b>按Q切换形态</b>：玉米粒 -> 爆米花 -> 玉米棒 -> 玉米粒（循环切换，每次消耗20蓝条）<br>
+    靠近火苗解锁爆米花 | 触碰泥土解锁玉米棒<br>
+    水分回血(+15) | 肥料回蓝(+30) | 收集食材 | 金币目标50枚 | 消灭母鸡
+</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// ============ 四季关卡配置 ============
+const LEVELS = [
+    {
+        name: "春之萌芽",
+        season: "春季",
+        desc: "春雨滋润大地，万物复苏。小心春雨会让地面湿滑，跳跃时需要更加精准！收集新鲜的西红柿，为最终的盛宴做准备。",
+        bgTop: '#87CEEB', bgBot: '#98D98E',
+        groundColor: '#5a8f3c', dirtColor: '#8b6914',
+        platformColor: '#8b7355', grassTop: '#6b8e23',
+        fireColor: '#e74c3c', fireInner: '#f39c12',
+        special: 'rain',
+        materials: [{ type: 'tomato', emoji: '\uD83C\uDF45', name: '西红柿' }],
+        mapWidth: 2000
+    },
+    {
+        name: "夏之繁茂",
+        season: "夏季",
+        desc: "烈日炎炎，阳光充足。部分平台会被烈日晒得滚烫，站太久会掉血！收集脆甜的胡萝卜，让菜肴更加丰富。",
+        bgTop: '#4a90d9', bgBot: '#f0e68c',
+        groundColor: '#6b8e23', dirtColor: '#a0522d',
+        platformColor: '#cd853f', grassTop: '#9acd32',
+        fireColor: '#ff4500', fireInner: '#ffd700',
+        special: 'hot_platforms',
+        materials: [{ type: 'carrot', emoji: '\uD83E\uDD55', name: '胡萝卜' }],
+        mapWidth: 2200
+    },
+    {
+        name: "秋之丰收",
+        season: "秋季",
+        desc: "秋风萧瑟，落叶纷飞。落叶会遮挡视线，母鸡们也在疯狂收集食物过冬。收集金黄的南瓜，为盛宴增添色彩。",
+        bgTop: '#d4a574', bgBot: '#daa520',
+        groundColor: '#8fbc8f', dirtColor: '#8b4513',
+        platformColor: '#a0522d', grassTop: '#556b2f',
+        fireColor: '#ff6347', fireInner: '#ffa500',
+        special: 'leaves',
+        materials: [{ type: 'pumpkin', emoji: '\uD83C\uDF83', name: '南瓜' }],
+        mapWidth: 2400
+    },
+    {
+        name: "冬之蕴藏",
+        season: "冬季",
+        desc: "冰天雪地，寒风刺骨。地面结冰非常滑，部分平台会闪烁预警后暂时消失（约3秒后恢复），注意观察黄色闪烁提醒！收集鲜嫩的白菜，完成你的食材收集之旅。",
+        bgTop: '#b0c4de', bgBot: '#e0e0e0',
+        groundColor: '#f0f8ff', dirtColor: '#696969',
+        platformColor: '#a9a9a9', grassTop: '#dcdcdc',
+        fireColor: '#ff6b6b', fireInner: '#ffe4e1',
+        special: 'ice',
+        materials: [{ type: 'cabbage', emoji: '\uD83E\uDD6C', name: '白菜' }],
+        mapWidth: 2600
+    }
+];
+
+let gameState = 'intro';
+let currentLevel = 0;
+let keys = {};
+let mouse = { x: 0, y: 0, down: false };
+let startTime = Date.now();
+let collectedMaterials = [];
+
+let player = {
+    x: 100, y: 300, width: 28, height: 28,
+    vx: 0, vy: 0,
+    hp: 100, maxHp: 100,
+    mp: 100, maxMp: 100,
+    coins: 0, targetCoins: 50,
+    state: 'corn',
+    hasPopcornSkill: false,
+    hasCobSkill: false,
+    isFlying: false,
+    facing: 1,
+    invincible: 0,
+    attackCooldown: 0,
+    tailCount: 1,
+    animFrame: 0,
+    onGround: false,
+};
+
+let fires = [], dirts = [], waters = [], fertilizers = [];
+let boxes = [], coinsArr = [], hens = [], materialsArr = [];
+let particles = [], platforms = [], decorations = [];
+let leaves = [], raindrops = [];
+let camera = { x: 0, y: 0 };
+
+// ============ 初始化地图 ============
+function initMap() {
+    const cfg = LEVELS[currentLevel];
+    const W = cfg.mapWidth;
+
+    fires = []; dirts = []; waters = []; fertilizers = [];
+    boxes = []; coinsArr = []; hens = []; materialsArr = [];
+    particles = []; platforms = []; decorations = [];
+    leaves = []; raindrops = [];
+
+    const groundY = 520;
+    for (let x = 0; x < W; x += 60) {
+        platforms.push({ x: x, y: groundY, w: 60, h: 130, type: 'ground', visible: true });
+    }
+
+    if (currentLevel === 0) {
+        platforms.push({ x: 200, y: 450, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 340, y: 400, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 480, y: 350, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 620, y: 300, w: 120, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 780, y: 350, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 920, y: 400, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1080, y: 350, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1220, y: 300, w: 120, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1380, y: 250, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1520, y: 300, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1660, y: 380, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1800, y: 450, w: 100, h: 20, type: 'platform', visible: true });
+
+        fires.push({ x: 665, y: 270, w: 30, h: 30, active: true });
+        dirts.push({ x: 1260, y: 270, w: 40, h: 30, active: true });
+        materialsArr.push({ x: 500, y: 320, w: 25, h: 25, type: 'tomato', emoji: '\uD83C\uDF45', active: true });
+    } else if (currentLevel === 1) {
+        platforms.push({ x: 180, y: 450, w: 90, h: 20, type: 'platform', visible: true, hot: true });
+        platforms.push({ x: 310, y: 400, w: 90, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 440, y: 340, w: 90, h: 20, type: 'platform', visible: true, hot: true });
+        platforms.push({ x: 580, y: 290, w: 110, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 730, y: 340, w: 90, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 860, y: 390, w: 90, h: 20, type: 'platform', visible: true, hot: true });
+        platforms.push({ x: 1000, y: 330, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1140, y: 280, w: 110, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1300, y: 230, w: 100, h: 20, type: 'platform', visible: true, hot: true });
+        platforms.push({ x: 1440, y: 290, w: 90, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1580, y: 350, w: 90, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1720, y: 420, w: 90, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1900, y: 480, w: 100, h: 20, type: 'platform', visible: true });
+
+        fires.push({ x: 625, y: 260, w: 30, h: 30, active: true });
+        fires.push({ x: 1345, y: 200, w: 30, h: 30, active: true });
+        dirts.push({ x: 1185, y: 250, w: 40, h: 30, active: true });
+        dirts.push({ x: 1750, y: 390, w: 40, h: 30, active: true });
+        materialsArr.push({ x: 1040, y: 300, w: 25, h: 25, type: 'carrot', emoji: '\uD83E\uDD55', active: true });
+    } else if (currentLevel === 2) {
+        platforms.push({ x: 200, y: 450, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 350, y: 400, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 500, y: 340, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 660, y: 290, w: 120, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 820, y: 350, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 960, y: 400, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1120, y: 340, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1280, y: 280, w: 120, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1450, y: 230, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1600, y: 290, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1760, y: 360, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 1920, y: 430, w: 100, h: 20, type: 'platform', visible: true });
+        platforms.push({ x: 2100, y: 490, w: 100, h: 20, type: 'platform', visible: true });
+
+        fires.push({ x: 710, y: 260, w: 30, h: 30, active: true });
+        dirts.push({ x: 1320, y: 250, w: 40, h: 30, active: true });
+        dirts.push({ x: 1800, y: 330, w: 40, h: 30, active: true });
+        materialsArr.push({ x: 1500, y: 200, w: 25, h: 25, type: 'pumpkin', emoji: '\uD83C\uDF83', active: true });
+
+        for (let i = 0; i < 40; i++) {
+            leaves.push({
+                x: Math.random() * W, y: Math.random() * 500,
+                vx: (Math.random() - 0.5) * 30,
+                vy: 20 + Math.random() * 30,
+                size: 8 + Math.random() * 12,
+                color: ['#d2691e', '#cd853f', '#daa520', '#8b4513'][Math.floor(Math.random()*4)],
+                rot: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 2
+            });
+        }
+    } else {
+        // 冬季平台 - 只有部分会闪烁消失（约30%），带预警
+        let winterPlatforms = [
+            { x: 200, y: 450, w: 100, h: 20 },
+            { x: 350, y: 400, w: 80, h: 20 },
+            { x: 480, y: 340, w: 80, h: 20 },
+            { x: 620, y: 280, w: 100, h: 20 },
+            { x: 760, y: 340, w: 80, h: 20 },
+            { x: 900, y: 400, w: 80, h: 20 },
+            { x: 1040, y: 340, w: 100, h: 20 },
+            { x: 1200, y: 280, w: 100, h: 20 },
+            { x: 1360, y: 220, w: 80, h: 20 },
+            { x: 1500, y: 280, w: 100, h: 20 },
+            { x: 1660, y: 350, w: 80, h: 20 },
+            { x: 1800, y: 420, w: 100, h: 20 },
+            { x: 1960, y: 350, w: 80, h: 20 },
+            { x: 2100, y: 280, w: 100, h: 20 },
+            { x: 2260, y: 350, w: 80, h: 20 },
+            { x: 2400, y: 450, w: 100, h: 20 }
+        ];
+
+        for (let i = 0; i < winterPlatforms.length; i++) {
+            let wp = winterPlatforms[i];
+            // 约30%的平台会闪烁消失，带预警
+            let canDisappear = (i % 3 === 0); // 每3个中的第1个会消失
+            platforms.push({
+                x: wp.x, y: wp.y, w: wp.w, h: wp.h,
+                type: 'platform',
+                visible: true,
+                canDisappear: canDisappear,
+                flashWarning: 0,
+                hiddenTimer: 0,
+                nextFlash: canDisappear ? (2.0 + Math.random() * 3.0) : 0
+            });
+        }
+
+        fires.push({ x: 665, y: 250, w: 30, h: 30, active: true });
+        fires.push({ x: 2150, y: 250, w: 30, h: 30, active: true });
+        dirts.push({ x: 1240, y: 250, w: 40, h: 30, active: true });
+        dirts.push({ x: 1840, y: 390, w: 40, h: 30, active: true });
+        materialsArr.push({ x: 1390, y: 190, w: 25, h: 25, type: 'cabbage', emoji: '\uD83E\uDD6C', active: true });
+    }
+
+    boxes.push({ x: 250, y: 490, w: 25, h: 25, active: true });
+    boxes.push({ x: Math.floor(W * 0.3), y: 490, w: 25, h: 25, active: true });
+    boxes.push({ x: Math.floor(W * 0.6), y: 490, w: 25, h: 25, active: true });
+    boxes.push({ x: Math.floor(W * 0.85), y: 490, w: 25, h: 25, active: true });
+
+    waters.push({ x: 150, y: 490, w: 20, h: 25, active: true });
+    waters.push({ x: Math.floor(W * 0.25), y: 320, w: 20, h: 25, active: true });
+    waters.push({ x: Math.floor(W * 0.5), y: 270, w: 20, h: 25, active: true });
+    waters.push({ x: Math.floor(W * 0.75), y: 320, w: 20, h: 25, active: true });
+
+    fertilizers.push({ x: 400, y: 370, w: 20, h: 25, active: true });
+    fertilizers.push({ x: Math.floor(W * 0.4), y: 270, w: 20, h: 25, active: true });
+    fertilizers.push({ x: Math.floor(W * 0.7), y: 370, w: 20, h: 25, active: true });
+    fertilizers.push({ x: Math.floor(W * 0.9), y: 270, w: 20, h: 25, active: true });
+
+    for (let i = 0; i < 30; i++) {
+        decorations.push({
+            x: Math.random() * W,
+            y: groundY - 20 - Math.random() * 15,
+            type: Math.random() > 0.5 ? 'flower' : 'grass',
+            color: Math.random() > 0.5 ? '#e74c3c' : '#f1c40f'
+        });
+    }
+
+    spawnHens(5);
+}
+
+function spawnHens(count) {
+    const W = LEVELS[currentLevel].mapWidth;
+    for (let i = 0; i < count; i++) {
+        let px = 300 + Math.random() * (W - 400);
+        let py = 490;
+        hens.push({
+            x: px, y: py,
+            w: 36, h: 32,
+            hp: 40 + Math.floor(Math.random() * 21),
+            maxHp: 40 + Math.floor(Math.random() * 21),
+            vx: (Math.random() - 0.5) * 2,
+            vy: 0,
+            attackCooldown: 0,
+            animFrame: 0,
+            peckTimer: 0
+        });
+    }
+}
+
+// ============ 输入处理 ============
+document.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'Space') e.preventDefault();
+});
+document.addEventListener('keyup', e => {
+    keys[e.code] = false;
+});
+canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left + camera.x;
+    mouse.y = e.clientY - rect.top + camera.y;
+});
+canvas.addEventListener('mousedown', () => mouse.down = true);
+canvas.addEventListener('mouseup', () => mouse.down = false);
+
+function rectIntersect(a, b) {
+    return a.x < b.x + b.w && a.x + a.width > b.x &&
+           a.y < b.y + b.h && a.y + a.height > b.y;
+}
+
+function platformCollide(px, py, pw, ph) {
+    for (let p of platforms) {
+        if (!p.visible) continue;
+        if (px < p.x + p.w && px + pw > p.x &&
+            py < p.y + p.h && py + ph > p.y) {
+            return p;
+        }
+    }
+    return null;
+}
+
+// ============ Q键切换形态系统 ============
+function switchForm() {
+    if (gameState !== 'playing') return;
+
+    // 检查蓝条
+    if (player.mp < 20) {
+        showHint('蓝条不足！需要肥料补充！');
+        return;
+    }
+
+    // 循环切换：corn -> popcorn -> cob -> corn
+    let nextState;
+    let canSwitch = false;
+
+    if (player.state === 'corn') {
+        // 切换到爆米花
+        if (player.hasPopcornSkill) {
+            nextState = 'popcorn';
+            canSwitch = true;
+            showHint('爆米花形态！漂浮飞行！');
+        } else {
+            showHint('还未解锁爆米花！靠近火苗解锁！');
+            return;
+        }
+    } else if (player.state === 'popcorn') {
+        // 切换到玉米棒
+        if (player.hasCobSkill) {
+            nextState = 'cob';
+            canSwitch = true;
+            showHint('玉米棒形态！可以攻击！');
+        } else {
+            showHint('还未解锁玉米棒！触碰泥土解锁！');
+            return;
+        }
+    } else if (player.state === 'cob') {
+        // 切换回玉米粒
+        nextState = 'corn';
+        canSwitch = true;
+        showHint('玉米粒形态！基础移动！');
+    }
+
+    if (canSwitch) {
+        player.state = nextState;
+        player.mp -= 20;
+
+        if (nextState === 'popcorn') {
+            player.isFlying = true;
+            player.vy = 0;
+        } else {
+            player.isFlying = false;
+        }
+    }
+}
+
+// ============ 更新逻辑 ============
+function update(dt) {
+    if (gameState !== 'playing') return;
+    const cfg = LEVELS[currentLevel];
+
+    const elapsed = (Date.now() - startTime) / 1000;
+    if (elapsed > 10) {
+        const inst = document.getElementById('instructions');
+        if (inst.style.opacity !== '0') {
+            inst.style.opacity = '0';
+            setTimeout(() => { inst.style.display = 'none'; }, 500);
+        }
+    }
+
+    const speed = 200;
+    const jumpForce = 420;
+    const gravity = 900;
+    const flySpeed = 250;
+
+    let moveX = 0;
+    if (keys['KeyA'] || keys['ArrowLeft']) moveX = -1;
+    if (keys['KeyD'] || keys['ArrowRight']) moveX = 1;
+
+    // Q键检测（按下瞬间触发一次）
+    if (keys['KeyQ']) {
+        keys['KeyQ'] = false; // 防止连续触发
+        switchForm();
+    }
+
+    if (player.state === 'popcorn') {
+        player.vx = moveX * flySpeed;
+        let moveY = 0;
+        if (keys['KeyW'] || keys['ArrowUp']) moveY = -1;
+        if (keys['Space'] || keys['KeyS'] || keys['ArrowDown']) moveY = 1;
+        player.vy = moveY * flySpeed;
+
+        player.x += player.vx * dt;
+        player.y += player.vy * dt;
+
+        player.x = Math.max(0, Math.min(cfg.mapWidth - 30, player.x));
+        player.y = Math.max(0, Math.min(600, player.y));
+    } else {
+        let friction = (cfg.special === 'ice') ? 0.98 : 0.8;
+
+        if (moveX !== 0) {
+            player.vx = moveX * speed;
+            player.facing = moveX > 0 ? 1 : -1;
+        } else {
+            player.vx *= friction;
+        }
+
+        player.vy += gravity * dt;
+
+        player.x += player.vx * dt;
+
+        let plat = platformCollide(player.x, player.y, player.width, player.height);
+        if (plat) {
+            if (player.vx > 0) player.x = plat.x - player.width;
+            else if (player.vx < 0) player.x = plat.x + plat.w;
+            player.vx = 0;
+        }
+
+        player.y += player.vy * dt;
+        player.onGround = false;
+
+        plat = platformCollide(player.x, player.y, player.width, player.height);
+        if (plat) {
+            if (player.vy > 0) {
+                player.y = plat.y - player.height;
+                player.vy = 0;
+                player.onGround = true;
+                if (plat.hot && Math.random() < 0.05) {
+                    player.hp -= 1;
+                    showHint('烫脚！快离开！');
+                }
+            } else if (player.vy < 0) {
+                player.y = plat.y + plat.h;
+                player.vy = 0;
+            }
+        }
+
+        if (keys['Space'] && player.onGround) {
+            player.vy = -jumpForce;
+            player.onGround = false;
+        }
+
+        player.x = Math.max(0, Math.min(cfg.mapWidth - 30, player.x));
+        if (player.y > 700) player.hp = 0;
+    }
+
+    // 攻击（玉米棒状态）
+    if (player.state === 'cob' && mouse.down && player.attackCooldown <= 0) {
+        player.attackCooldown = 0.15;
+        let angle = Math.atan2(mouse.y - (player.y + player.height/2), mouse.x - (player.x + player.width/2));
+        for (let i = 0; i < 3; i++) {
+            let spread = (Math.random() - 0.5) * 0.3;
+            particles.push({
+                x: player.x + player.width/2,
+                y: player.y + player.height/2,
+                vx: Math.cos(angle + spread) * 500,
+                vy: Math.sin(angle + spread) * 500,
+                life: 0.6, maxLife: 0.6,
+                size: 6, color: '#d4a017',
+                damage: 10, type: 'projectile'
+            });
+        }
+    }
+    if (player.attackCooldown > 0) player.attackCooldown -= dt;
+
+    // 火苗 - 解锁爆米花技能
+    for (let f of fires) {
+        if (f.active && rectIntersect(player, f)) {
+            if (!player.hasPopcornSkill) {
+                player.hasPopcornSkill = true;
+                showHint('解锁爆米花技能！按Q切换形态！');
+            }
+        }
+    }
+
+    // 泥土 - 解锁玉米棒技能
+    for (let d of dirts) {
+        if (d.active && rectIntersect(player, d)) {
+            if (!player.hasCobSkill) {
+                player.hasCobSkill = true;
+                showHint('解锁玉米棒形态！按Q切换形态！');
+            }
+        }
+    }
+
+    // 盒子
+    for (let b of boxes) {
+        if (b.active && rectIntersect(player, b)) {
+            b.active = false;
+            player.tailCount += 1;
+            showHint('玉米粒尾巴 +1！');
+            spawnParticles(b.x + b.w/2, b.y + b.h/2, '#f39c12', 8);
+        }
+    }
+
+    // 水分
+    for (let w of waters) {
+        if (w.active && rectIntersect(player, w)) {
+            w.active = false;
+            player.hp = Math.min(player.maxHp, player.hp + 15);
+            showHint('HP +15！');
+            spawnParticles(w.x + w.w/2, w.y + w.h/2, '#3498db', 10);
+        }
+    }
+
+    // 肥料（回蓝）
+    for (let f of fertilizers) {
+        if (f.active && rectIntersect(player, f)) {
+            f.active = false;
+            player.mp = Math.min(player.maxMp, player.mp + 30);
+            showHint('肥料补充！蓝条 +30！');
+            spawnParticles(f.x + f.w/2, f.y + f.h/2, '#9b59b6', 10);
+        }
+    }
+
+    // 食材
+    for (let m of materialsArr) {
+        if (m.active && rectIntersect(player, m)) {
+            m.active = false;
+            if (!collectedMaterials.find(cm => cm.type === m.type)) {
+                collectedMaterials.push({ type: m.type, emoji: m.emoji, name: m.name });
+            }
+            showHint('收集到 ' + m.name + '！');
+            spawnParticles(m.x + m.w/2, m.y + m.h/2, '#e74c3c', 12);
+        }
+    }
+
+    // 金币
+    for (let i = coinsArr.length - 1; i >= 0; i--) {
+        let c = coinsArr[i];
+        let dx = (player.x + player.width/2) - c.x;
+        let dy = (player.y + player.height/2) - c.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 40) {
+            player.coins++;
+            coinsArr.splice(i, 1);
+            if (player.coins >= player.targetCoins) {
+                levelComplete();
+            }
+        }
+    }
+
+    // 母鸡 AI
+    for (let h of hens) {
+        h.animFrame += dt;
+        h.x += h.vx;
+        if (Math.random() < 0.01) h.vx = (Math.random() - 0.5) * 2;
+
+        let plat = platformCollide(h.x, h.y + 5, h.w, h.h);
+        if (plat && plat.type === 'platform') {
+            if (h.x < plat.x || h.x + h.w > plat.x + plat.w) h.vx *= -1;
+        }
+
+        let dx = (player.x + player.width/2) - (h.x + h.w/2);
+        let dy = (player.y + player.height/2) - (h.y + h.h/2);
+        let dist = Math.sqrt(dx*dx + dy*dy);
+
+        if (dist < 250) h.vx = (dx / dist) * 1.5;
+
+        if (dist < 38 && h.attackCooldown <= 0 && player.invincible <= 0) {
+            h.attackCooldown = 1.0;
+            player.hp -= 10;
+            player.invincible = 1.0;
+            showHint('被母鸡啄了！HP -10！');
+            spawnParticles(player.x + player.width/2, player.y + player.height/2, '#e74c3c', 6);
+            if (player.hp <= 0) {
+                player.hp = 0;
+                gameState = 'gameover';
+                document.getElementById('gameOver').style.display = 'flex';
+            }
+        }
+        if (h.attackCooldown > 0) h.attackCooldown -= dt;
+        h.x = Math.max(0, Math.min(cfg.mapWidth - 40, h.x));
+    }
+
+    // 粒子
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+
+        if (p.type === 'projectile') {
+            for (let h of hens) {
+                if (p.x > h.x && p.x < h.x + h.w && p.y > h.y && p.y < h.y + h.h) {
+                    h.hp -= p.damage;
+                    p.life = 0;
+                    spawnParticles(p.x, p.y, '#8b4513', 5);
+                    if (h.hp <= 0) {
+                        let coinCount = 10 + Math.floor(Math.random() * 6);
+                        for (let j = 0; j < coinCount; j++) {
+                            coinsArr.push({
+                                x: h.x + h.w/2 + (Math.random()-0.5)*40,
+                                y: h.y + h.h/2 + (Math.random()-0.5)*40,
+                                vx: (Math.random()-0.5)*100,
+                                vy: -100 - Math.random()*100,
+                                bobOffset: Math.random() * Math.PI * 2
+                            });
+                        }
+                        showHint('击败母鸡！爆出 ' + coinCount + ' 金币！');
+                        spawnParticles(h.x + h.w/2, h.y + h.h/2, '#f1c40f', 15);
+                    }
+                    break;
+                }
+            }
+        }
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    // 金币物理
+    for (let c of coinsArr) {
+        c.vy += 400 * dt;
+        c.x += c.vx * dt;
+        c.y += c.vy * dt;
+        let plat = platformCollide(c.x - 8, c.y - 8, 16, 16);
+        if (plat && c.vy > 0) {
+            c.y = plat.y - 8;
+            c.vy = 0;
+            c.vx *= 0.9;
+        }
+        c.x = Math.max(8, Math.min(cfg.mapWidth - 8, c.x));
+    }
+
+    // 冬季平台闪烁 - 带预警，只有30%的平台会消失
+    if (cfg.special === 'ice') {
+        for (let p of platforms) {
+            if (p.type === 'platform' && p.canDisappear) {
+                // 闪烁预警阶段（0.5秒）
+                if (p.flashWarning > 0) {
+                    p.flashWarning -= dt;
+                    if (p.flashWarning <= 0) {
+                        p.visible = false;
+                        p.hiddenTimer = 2.0; // 隐藏2秒
+                    }
+                }
+                // 隐藏阶段
+                else if (p.hiddenTimer > 0) {
+                    p.hiddenTimer -= dt;
+                    if (p.hiddenTimer <= 0) {
+                        p.visible = true;
+                        p.flashWarning = 0;
+                        p.nextFlash = 3.0 + Math.random() * 4.0; // 3-7秒后再次预警
+                    }
+                }
+                // 等待下次预警
+                else if (p.nextFlash > 0) {
+                    p.nextFlash -= dt;
+                    if (p.nextFlash <= 0) {
+                        p.flashWarning = 1.0; // 1秒预警时间
+                    }
+                }
+            }
+        }
+    }
+
+    // 秋季落叶
+    if (cfg.special === 'leaves') {
+        for (let leaf of leaves) {
+            leaf.x += leaf.vx * dt;
+            leaf.y += leaf.vy * dt;
+            leaf.rot += leaf.rotSpeed * dt;
+            if (leaf.y > 600) {
+                leaf.y = -20;
+                leaf.x = Math.random() * cfg.mapWidth;
+            }
+        }
+    }
+
+    // 春季雨水
+    if (cfg.special === 'rain') {
+        if (Math.random() < 0.3) {
+            raindrops.push({
+                x: camera.x + Math.random() * canvas.width,
+                y: camera.y - 10,
+                vy: 300 + Math.random() * 200,
+                life: 2
+            });
+        }
+        for (let i = raindrops.length - 1; i >= 0; i--) {
+            let r = raindrops[i];
+            r.y += r.vy * dt;
+            r.life -= dt;
+            if (r.life <= 0 || r.y > camera.y + canvas.height) raindrops.splice(i, 1);
+        }
+    }
+
+    if (player.invincible > 0) player.invincible -= dt;
+    if (hens.length < 6 && Math.random() < 0.002) spawnHens(1);
+
+    updateUI();
+
+    camera.x = player.x - canvas.width / 2 + player.width / 2;
+    camera.y = player.y - canvas.height / 2 + player.height / 2;
+    camera.x = Math.max(0, Math.min(cfg.mapWidth - canvas.width, camera.x));
+    camera.y = Math.max(-100, Math.min(400 - canvas.height, camera.y));
+}
+
+function levelComplete() {
+    gameState = 'victory';
+    const cfg = LEVELS[currentLevel];
+    const mat = cfg.materials[0];
+    const hasMat = collectedMaterials.find(cm => cm.type === mat.type);
+
+    document.getElementById('victory').style.display = 'flex';
+
+    let html = '';
+    for (let cm of collectedMaterials) {
+        html += '<div class="material-item collected">' + cm.emoji + ' ' + cm.name + '</div>';
+    }
+    if (!hasMat) {
+        html += '<div class="material-item">' + mat.emoji + ' ' + mat.name + ' 未收集</div>';
+    }
+    document.getElementById('materialsDisplay').innerHTML = html;
+
+    if (currentLevel < 3) {
+        document.getElementById('victoryMsg').textContent = 
+            hasMat ? '已获得 ' + mat.name + '！准备进入下一关！' : '未获得 ' + mat.name + '，下一关仍可收集！';
+        document.getElementById('nextLevelBtn').style.display = 'inline-block';
+    } else {
+        document.getElementById('victoryMsg').textContent = '所有关卡完成！准备烹饪盛宴！';
+        document.getElementById('nextLevelBtn').textContent = '制作菜肴';
+        document.getElementById('nextLevelBtn').onclick = showDishScreen;
+    }
+}
+
+function showDishScreen() {
+    document.getElementById('victory').style.display = 'none';
+    document.getElementById('dishScreen').style.display = 'flex';
+
+    const plate = document.getElementById('dishPlate');
+    plate.innerHTML = '';
+
+    const allMats = [
+        { type: 'corn', emoji: '\uD83C\uDF3D', name: '玉米' },
+        ...collectedMaterials
+    ];
+
+    for (let m of allMats) {
+        const div = document.createElement('div');
+        div.className = 'dish-ingredient';
+        div.textContent = m.emoji;
+        div.title = m.name;
+        plate.appendChild(div);
+    }
+
+    const dishNames = ['玉米蔬菜煲', '田园大丰收', '农庄什锦锅', '四季鲜蔬烩'];
+    const dishDescs = [
+        '用玉米粒、西红柿、胡萝卜、南瓜和白菜精心烹制，汇聚了农庄四季的精华！',
+        '一道充满农庄风情的大菜，每一口都是大自然的馈赠！',
+        '热气腾腾的什锦锅，玉米粒的香甜与蔬菜的鲜美完美融合！',
+        '跨越春夏秋冬的味觉之旅，这是属于勇敢玉米粒的终极奖赏！'
+    ];
+
+    const idx = Math.min(collectedMaterials.length, 3);
+    document.getElementById('dishName').textContent = dishNames[idx];
+    document.getElementById('dishDesc').textContent = dishDescs[idx];
+}
+
+function spawnParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * 200,
+            vy: (Math.random() - 0.5) * 200,
+            life: 0.5 + Math.random() * 0.5,
+            maxLife: 1,
+            size: 3 + Math.random() * 4,
+            color: color,
+            type: 'effect'
+        });
+    }
+}
+
+let hintTimer = null;
+function showHint(text) {
+    const hint = document.getElementById('skillHint');
+    hint.textContent = text;
+    hint.style.opacity = '1';
+    if (hintTimer) clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => { hint.style.opacity = '0'; }, 2500);
+}
+
+function updateUI() {
+    document.getElementById('hpBar').style.width = (player.hp / player.maxHp * 100) + '%';
+    document.getElementById('hpText').textContent = Math.max(0, player.hp) + '/' + player.maxHp;
+    document.getElementById('mpBar').style.width = (player.mp / player.maxMp * 100) + '%';
+    document.getElementById('mpText').textContent = Math.floor(player.mp) + '/' + player.maxMp;
+    document.getElementById('coinText').textContent = player.coins + ' / ' + player.targetCoins;
+    let stateNames = { corn: '玉米粒', popcorn: '爆米花', cob: '玉米棒' };
+    document.getElementById('stateText').textContent = stateNames[player.state] || player.state;
+    document.getElementById('materialText').textContent = collectedMaterials.length + '/4';
+}
+
+// ============ 渲染 ============
+function draw() {
+    const cfg = LEVELS[currentLevel];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    let grad = ctx.createLinearGradient(camera.x, camera.y, camera.x, camera.y + canvas.height);
+    grad.addColorStop(0, cfg.bgTop);
+    grad.addColorStop(1, cfg.bgBot);
+    ctx.fillStyle = grad;
+    ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height);
+
+    ctx.fillStyle = cfg.special === 'ice' ? '#c0c0c0' : '#7cb87c';
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(camera.x, camera.y + 400);
+    for (let x = camera.x; x <= camera.x + canvas.width; x += 50) {
+        ctx.lineTo(x, camera.y + 350 + Math.sin(x * 0.01) * 30);
+    }
+    ctx.lineTo(camera.x + canvas.width, camera.y + 650);
+    ctx.lineTo(camera.x, camera.y + 650);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    for (let d of decorations) {
+        if (d.x < camera.x - 50 || d.x > camera.x + canvas.width + 50) continue;
+        if (d.type === 'flower') {
+            ctx.fillStyle = d.color;
+            ctx.beginPath(); ctx.arc(d.x, d.y, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#27ae60'; ctx.fillRect(d.x - 1, d.y, 2, 15);
+        } else {
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillRect(d.x, d.y, 3, 12);
+            ctx.fillRect(d.x + 5, d.y + 3, 3, 10);
+        }
+    }
+
+    for (let p of platforms) {
+        if (!p.visible) continue;
+        if (p.x + p.w < camera.x || p.x > camera.x + canvas.width) continue;
+
+        // 冬季闪烁预警效果
+        if (cfg.special === 'ice' && p.canDisappear && p.flashWarning > 0) {
+            let flashIntensity = Math.sin(Date.now() * 0.02) * 0.5 + 0.5;
+            ctx.fillStyle = 'rgba(255, 255, 0, ' + (flashIntensity * 0.6) + ')';
+            ctx.fillRect(p.x - 2, p.y - 2, p.w + 4, p.h + 4);
+        }
+
+        if (p.type === 'ground') {
+            ctx.fillStyle = cfg.groundColor;
+            ctx.fillRect(p.x, p.y, p.w, 20);
+            ctx.fillStyle = cfg.dirtColor;
+            ctx.fillRect(p.x, p.y + 20, p.w, p.h - 20);
+            ctx.fillStyle = cfg.grassTop;
+            for (let i = 0; i < p.w; i += 15) {
+                ctx.fillRect(p.x + i, p.y - 3, 3, 8);
+            }
+        } else {
+            ctx.fillStyle = p.hot ? '#cd5c5c' : cfg.platformColor;
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            ctx.fillStyle = cfg.grassTop;
+            ctx.fillRect(p.x, p.y, p.w, 5);
+            if (p.hot) {
+                ctx.fillStyle = 'rgba(255,0,0,0.2)';
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+            }
+            ctx.strokeStyle = '#6b5a3e';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < p.w; i += 20) {
+                ctx.beginPath();
+                ctx.moveTo(p.x + i, p.y); ctx.lineTo(p.x + i, p.y + p.h);
+                ctx.stroke();
+            }
+        }
+    }
+
+    for (let f of fires) {
+        if (!f.active) continue;
+        let flicker = Math.sin(Date.now() * 0.01) * 3;
+        ctx.fillStyle = cfg.fireColor;
+        ctx.beginPath();
+        ctx.moveTo(f.x + f.w/2, f.y - 10 + flicker);
+        ctx.lineTo(f.x, f.y + f.h); ctx.lineTo(f.x + f.w, f.y + f.h);
+        ctx.fill();
+        ctx.fillStyle = cfg.fireInner;
+        ctx.beginPath();
+        ctx.moveTo(f.x + f.w/2, f.y + flicker);
+        ctx.lineTo(f.x + 5, f.y + f.h - 5);
+        ctx.lineTo(f.x + f.w - 5, f.y + f.h - 5);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,100,50,0.2)';
+        ctx.beginPath();
+        ctx.arc(f.x + f.w/2, f.y + f.h/2, 25 + flicker, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    for (let d of dirts) {
+        if (!d.active) continue;
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(d.x, d.y, d.w, d.h);
+        ctx.fillStyle = '#654321';
+        ctx.fillRect(d.x + 3, d.y + 3, d.w - 6, d.h - 6);
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(d.x + d.w/2 - 2, d.y - 8, 4, 10);
+        ctx.beginPath();
+        ctx.arc(d.x + d.w/2, d.y - 10, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    for (let b of boxes) {
+        if (!b.active) continue;
+        ctx.fillStyle = '#d4a017';
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.strokeStyle = '#8b6914'; ctx.lineWidth = 2;
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+        ctx.beginPath();
+        ctx.moveTo(b.x + b.w/2, b.y + 3); ctx.lineTo(b.x + b.w/2, b.y + b.h - 3);
+        ctx.moveTo(b.x + 3, b.y + b.h/2); ctx.lineTo(b.x + b.w - 3, b.y + b.h/2);
+        ctx.stroke();
+    }
+
+    for (let w of waters) {
+        if (!w.active) continue;
+        let bob = Math.sin(Date.now() * 0.003 + w.x) * 3;
+        ctx.fillStyle = '#3498db';
+        ctx.beginPath();
+        ctx.ellipse(w.x + w.w/2, w.y + w.h/2 + bob, w.w/2, w.h/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(w.x + w.w/2 - 3, w.y + w.h/2 + bob - 3, 4, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    for (let f of fertilizers) {
+        if (!f.active) continue;
+        let bob = Math.sin(Date.now() * 0.004 + f.x) * 3;
+        ctx.fillStyle = '#8e44ad';
+        ctx.beginPath();
+        ctx.arc(f.x + f.w/2, f.y + f.h/2 + bob, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('+', f.x + f.w/2, f.y + f.h/2 + bob + 4);
+    }
+
+    for (let m of materialsArr) {
+        if (!m.active) continue;
+        let bob = Math.sin(Date.now() * 0.003 + m.x) * 4;
+        ctx.font = '24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(m.emoji, m.x + m.w/2, m.y + m.h + bob);
+        ctx.fillStyle = 'rgba(255,200,50,0.2)';
+        ctx.beginPath();
+        ctx.arc(m.x + m.w/2, m.y + m.h/2 + bob, 20, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    for (let c of coinsArr) {
+        let bob = Math.sin(Date.now() * 0.005 + c.bobOffset) * 3;
+        ctx.fillStyle = '#f1c40f';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y + bob, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#d4a017'; ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = '#d4a017';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('$', c.x, c.y + bob + 3);
+    }
+
+    for (let h of hens) {
+        if (h.hp <= 0) continue;
+        let wiggle = Math.sin(h.animFrame * 4) * 2;
+        let peck = h.attackCooldown > 0.5 ? 5 : 0;
+
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.ellipse(h.x + h.w/2, h.y + h.h/2 + wiggle, h.w/2, h.h/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#f5f5dc';
+        ctx.beginPath();
+        ctx.ellipse(h.x + h.w/2 - 8, h.y + h.h/2 + wiggle, 8, 12, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath();
+        ctx.moveTo(h.x + h.w/2 - 6, h.y + wiggle);
+        ctx.lineTo(h.x + h.w/2 - 3, h.y - 8 + wiggle);
+        ctx.lineTo(h.x + h.w/2, h.y + wiggle);
+        ctx.lineTo(h.x + h.w/2 + 3, h.y - 6 + wiggle);
+        ctx.lineTo(h.x + h.w/2 + 6, h.y + wiggle);
+        ctx.fill();
+
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(h.x + h.w/2 - 6 + peck, h.y + 8 + wiggle, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#f39c12';
+        ctx.beginPath();
+        ctx.moveTo(h.x + h.w/2 + 8 + peck, h.y + 10 + wiggle);
+        ctx.lineTo(h.x + h.w/2 + 14 + peck, h.y + 12 + wiggle);
+        ctx.lineTo(h.x + h.w/2 + 8 + peck, h.y + 14 + wiggle);
+        ctx.fill();
+
+        ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(h.x + h.w/2 - 5, h.y + h.h + wiggle);
+        ctx.lineTo(h.x + h.w/2 - 5, h.y + h.h + 8 + wiggle);
+        ctx.moveTo(h.x + h.w/2 + 5, h.y + h.h + wiggle);
+        ctx.lineTo(h.x + h.w/2 + 5, h.y + h.h + 8 + wiggle);
+        ctx.stroke();
+
+        ctx.fillStyle = '#333';
+        ctx.fillRect(h.x, h.y - 10 + wiggle, h.w, 5);
+        ctx.fillStyle = '#e74c3c';
+        ctx.fillRect(h.x, h.y - 10 + wiggle, h.w * (h.hp / h.maxHp), 5);
+    }
+
+    drawPlayer();
+
+    for (let p of particles) {
+        ctx.globalAlpha = p.life / p.maxLife;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    if (cfg.special === 'leaves') {
+        for (let leaf of leaves) {
+            if (leaf.x < camera.x - 30 || leaf.x > camera.x + canvas.width + 30) continue;
+            ctx.save();
+            ctx.translate(leaf.x, leaf.y);
+            ctx.rotate(leaf.rot);
+            ctx.fillStyle = leaf.color;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, leaf.size, leaf.size * 0.6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    if (cfg.special === 'rain') {
+        ctx.strokeStyle = 'rgba(150,200,255,0.4)';
+        ctx.lineWidth = 1;
+        for (let r of raindrops) {
+            ctx.beginPath();
+            ctx.moveTo(r.x, r.y);
+            ctx.lineTo(r.x - 2, r.y + 12);
+            ctx.stroke();
+        }
+    }
+
+    if (cfg.special === 'ice') {
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        for (let i = 0; i < 30; i++) {
+            let sx = camera.x + (i * 37 + Date.now() * 0.02) % canvas.width;
+            let sy = ((i * 53 + Date.now() * 0.05) % (canvas.height + 20)) - 10;
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2 + Math.sin(i) * 1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    ctx.restore();
+}
+
+function drawPlayer() {
+    let x = player.x, y = player.y, w = player.width, h = player.height;
+    let blink = player.invincible > 0 && Math.floor(Date.now() / 100) % 2 === 0;
+    if (blink) ctx.globalAlpha = 0.5;
+
+    if (player.state === 'corn') {
+        ctx.fillStyle = '#f1c40f';
+        ctx.beginPath();
+        ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#d4a017'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#d4a017';
+        ctx.beginPath(); ctx.arc(x + w/2 - 3, y + h/2 - 3, 2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(x + w/2 - 5, y + h/2 - 2, 3, 0, Math.PI * 2);
+        ctx.arc(x + w/2 + 5, y + h/2 - 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        for (let i = 0; i < player.tailCount; i++) {
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath();
+            ctx.ellipse(x + w/2 - (i+1)*8 * player.facing, y + h/2 + 5, 4, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    } else if (player.state === 'popcorn') {
+        ctx.fillStyle = '#fff';
+        for (let i = 0; i < 5; i++) {
+            let angle = (i / 5) * Math.PI * 2 + Date.now() * 0.002;
+            let px = x + w/2 + Math.cos(angle) * 8;
+            let py = y + h/2 + Math.sin(angle) * 8;
+            ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = '#f5f5dc';
+        ctx.beginPath(); ctx.arc(x + w/2, y + h/2, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(x + w/2 - 5, y + h/2 - 2, 3, 0, Math.PI * 2);
+        ctx.arc(x + w/2 + 5, y + h/2 - 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.beginPath(); ctx.arc(x + w/2, y + h/2, 25, 0, Math.PI * 2); ctx.fill();
+    } else if (player.state === 'cob') {
+        ctx.fillStyle = '#f1c40f';
+        ctx.fillRect(x + 4, y, w - 8, h);
+        ctx.fillStyle = '#d4a017';
+        for (let row = 0; row < 3; row++) {
+            for (let col = 0; col < 3; col++) {
+                ctx.beginPath();
+                ctx.arc(x + 8 + col * 7, y + 6 + row * 8, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(x, y + 2, 4, h - 4);
+        ctx.fillRect(x + w - 4, y + 2, 4, h - 4);
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(x + w/2 - 5, y + 8, 3, 0, Math.PI * 2);
+        ctx.arc(x + w/2 + 5, y + 8, 3, 0, Math.PI * 2);
+        ctx.fill();
+        if (mouse.down) {
+            ctx.strokeStyle = '#e67e22';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x + w/2, y + h/2);
+            ctx.lineTo(mouse.x, mouse.y);
+            ctx.stroke();
+        }
+        for (let i = 0; i < player.tailCount; i++) {
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath();
+            ctx.ellipse(x + w/2 - (i+1)*8 * player.facing, y + h/2 + 5, 4, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    ctx.globalAlpha = 1;
+}
+
+// ============ 关卡系统 ============
+function showLevelIntro() {
+    const cfg = LEVELS[currentLevel];
+    document.getElementById('levelTitle').textContent = cfg.name;
+    document.getElementById('levelSeason').textContent = cfg.season;
+    document.getElementById('levelDesc').textContent = cfg.desc;
+    document.getElementById('levelIntro').style.display = 'flex';
+}
+
+function startLevel() {
+    document.getElementById('levelIntro').style.display = 'none';
+    gameState = 'playing';
+    startTime = Date.now();
+
+    player.x = 100; player.y = 300;
+    player.vx = 0; player.vy = 0;
+    player.hp = 100; player.mp = 100;
+    player.coins = 0;
+    player.state = 'corn';
+    player.hasPopcornSkill = false;
+    player.hasCobSkill = false;
+    player.isFlying = false;
+    player.invincible = 0;
+    player.attackCooldown = 0;
+    player.tailCount = 1;
+    player.onGround = false;
+
+    initMap();
+
+    const inst = document.getElementById('instructions');
+    inst.style.display = 'block';
+    inst.style.opacity = '1';
+}
+
+function nextLevel() {
+    document.getElementById('victory').style.display = 'none';
+    currentLevel++;
+    if (currentLevel < LEVELS.length) {
+        showLevelIntro();
+    } else {
+        showDishScreen();
+    }
+}
+
+// ============ 重新开始 ============
+function restartGame() {
+    currentLevel = 0;
+    collectedMaterials = [];
+    player = {
+        x: 100, y: 300, width: 28, height: 28,
+        vx: 0, vy: 0,
+        hp: 100, maxHp: 100,
+        mp: 100, maxMp: 100,
+        coins: 0, targetCoins: 50,
+        state: 'corn',
+        hasPopcornSkill: false,
+        hasCobSkill: false,
+        isFlying: false,
+        facing: 1,
+        invincible: 0,
+        attackCooldown: 0,
+        tailCount: 1,
+        animFrame: 0,
+        onGround: false,
+    };
+    gameState = 'intro';
+    startTime = Date.now();
+
+    document.getElementById('gameOver').style.display = 'none';
+    document.getElementById('victory').style.display = 'none';
+    document.getElementById('dishScreen').style.display = 'none';
+
+    const inst = document.getElementById('instructions');
+    inst.style.display = 'block';
+    inst.style.opacity = '1';
+
+    showLevelIntro();
+}
+
+// ============ 游戏循环 ============
+let lastTime = 0;
+function gameLoop(timestamp) {
+    let dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+    lastTime = timestamp;
+
+    update(dt);
+    draw();
+
+    requestAnimationFrame(gameLoop);
+}
+
+// ============ 启动 ============
+showLevelIntro();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
